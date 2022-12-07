@@ -51,7 +51,7 @@ using BasicPOMCP
 using D3Trees
 
 # ╔═╡ a88c0bf0-f4c0-11ea-0e61-853ac9a0c0cb
-md"## Partially Observable MDP (POMDP)"
+md"## 1. Partially Observable MDP (POMDP)"
 
 # ╔═╡ 32c56c10-f4d2-11ea-3c79-3dc8b852c182
 md"""
@@ -69,51 +69,94 @@ $R$                | Reward function      | `POMDPs.reward`
 $O$                | Observation function | `POMDPs.observation`
 $\gamma \in [0,1]$ | Discount factor      | `POMDPs.discount`
 
-Notice the addition of the observation space $\mathcal{O}$ and observation function $O$, which differ from the MDP 5-tuple. Rememeber, the agent receives _observations_ of the current state rather than the true state—and using past observations, it builds a _belief_ of the underlying state (this can be represented as a probability distribution over true states).
+Notice the addition of the observation space $\mathcal{O}$ and observation function $O$, which differ from the MDP 5-tuple.
+
+Indeed, the agent receives _observations_ of the current state rather than the true state—and using past observations, it builds a _belief_ of the underlying state (this can be represented as a probability distribution over true states).
 """
 
 # ╔═╡ a13e36e0-f4d2-11ea-28cf-d18a43e34c3e
-md"""
-## State set $\mathcal{S}$
+md"### 1.1 Set of State variables $\mathcal{S}$
 The *state* set in our problem is composed of both $satellite$ and $debris$ respective state *variables*.
 
+**Orbit location $satellite$**
+
+-  $a_{sat}$: size of semi-major axis of $orbit_{sat}$
+-  $e_{sat}$: eccentricity of $orbit_{sat}$
+-  $\omega_{sat}:$ argument of $orbit_{sat}$ (angle from the ascending node radius to the periapsis radius in a counter clockwise direction)
+-  $\nu_{sat}:$ position of $orbit_{sat}$ (angle from the periapsis radius to the object)
+
+⇒ gives the **position of the satellite** on a **2D orbit plane**
+
+**Orbit location $debris$**
+
+-  $a_{deb}$: size of semi-major axis of $orbit_{deb}$
+-  $e_{deb}$: eccentricity of $orbit_{deb}$
+-  $\omega_{deb}:$ argument of $orbit_{deb}$ (angle from the ascending node radius to the periapsis radius in a counter clockwise direction)
+-  $\nu_{deb}:$ position of $orbit_{deb}$ (angle from the periapsis radius to the object
+
+⇒ gives the **position of the debris** on a **2D orbit plane**
+
+**Speed**
+
+-  $V_{sat}$
+-  $V_{deb}$
+
+**Advisory**
+
+-  $s_{adv}$: current advisory
+
+**Other parameters**
+
+-  $s_{fuel}$: fuel level
+
 $$\begin{align}
-\mathcal{S_{sat}} &= \{\rm \}\\
-\mathcal{S_{deb}} &= \{\rm \}
+\mathcal{S_{sat}} &= \{\ a_{sat},e_{sat},\omega_{sat},\nu_{sat},V_{sat},s_{adv},s_{fuel}\}\\
+\mathcal{S_{deb}} &= \{\ a_{deb},e_{deb},\omega_{deb},\nu_{deb},V_{deb}\}
 \end{align}$$
-"""
+"
 
 # ╔═╡ dbc77e50-f529-11ea-0d79-71196165ac17
 
 
 # ╔═╡ 222c7568-d9b3-4148-9800-c42372969c14
-md"""
-## Actions set $\mathcal{A}$
+md"""### 1.2 Set of Actions $\mathcal{A}$
 The *actions* set in our problem is composed of clear $advisories$ to be given as **instructions** to the satellite.
 
 $$\begin{align}
 \mathcal{A} = \{\rm &Clear\ of\ Conflict,\\
-&Monitor\ Speed\ V\}\\
+&Monitor\ Speed\ V\,\\
+&Accelerate,\\
+&Decelerate\}\\
 
 \end{align}$$
 """
 
-# ╔═╡ bd6724d1-3067-4285-9ee0-c0b1363e8243
-@with_kw struct CryingBabyParameters
-	# Rewards
-	r_hungry::Real = -10
-	r_feed::Real = -5
+# ╔═╡ 33b27b26-2b32-4620-9212-262fb30fcbbd
+md"## 2. Julia Model"
 
+# ╔═╡ 67a7ce56-5cff-432c-96a2-08098bb8af44
+md"""
+### 2.1 Parameters
+We define *hardcoded* parameters to be tweaked.
+"""
+
+# ╔═╡ bd6724d1-3067-4285-9ee0-c0b1363e8243
+@with_kw struct SpacecraftCollisionAvoidanceParameters
+	# Rewards
+	r_danger::Real = -10
+	r_accelerate::Real = -5
+	r_decelerate::Real = -5
+	
 	# Transition probability
-	p_becomes_hungry::Real = 0.1
+	p_to_collide::Real = 0.1
 
 	# Observation probabilities
-	p_crying_when_hungry::Real = 0.8
-	p_crying_when_full::Real = 0.1
+	p_CDM_when_safe::Real = 0.1
+	p_CDM_when_danger::Real = 0.9
 end
 
 # ╔═╡ 647c5372-a632-42ae-ab32-ea6ad491b0b6
-params = CryingBabyParameters();
+params = SpacecraftCollisionAvoidanceParameters();
 
 # ╔═╡ b2a53c8e-f4db-11ea-08ba-67b9158f39b3
 md"""
@@ -122,37 +165,37 @@ We get the sparse categorical distribution (`SparseCat`) from `POMDPModelTools`,
 
 # ╔═╡ be1258b0-f4db-11ea-390e-2bcc849111d0
 md"""
-### State, Action, and Observation Spaces
+### 2.2 State, Action, and Observation Spaces
 We define enumerations for our states, actions, and observations using Julia's built-in `@enum`.
 """
 
 # ╔═╡ f49ffe90-f4dc-11ea-1ecb-9d6e6e66d3d4
 begin
-	@enum State HUNGRYₛ FULLₛ
-	@enum Action FEEDₐ IGNOREₐ
-	@enum Observation CRYINGₒ QUIETₒ
+	@enum State SAFEₛ DANGERₛ
+	@enum Action CLEARofCONFLICTₐ ACCELERATEₐ DECELERATEₐ
+	@enum Observation NoCDMₒ CDMₒ
 end
 
 # ╔═╡ 9df137d0-f61c-11ea-0dd6-67535f3b0d52
-md"We define ourstate, action, and observation *spaces*."
+md"We define our state, action, and observation *spaces*."
 
 # ╔═╡ c720f8a0-f61e-11ea-155d-c13361437a85
 md"##### State Space"
 
 # ╔═╡ b03708f0-f61e-11ea-38c8-5945da744bff
-𝒮 = [HUNGRYₛ, FULLₛ,TESTₛ]
+𝒮 = [SAFEₛ, DANGERₛ]
 
 # ╔═╡ ce359010-f61e-11ea-2f71-a1fc0b6d5300
 md"##### Action Space"
 
 # ╔═╡ e97a7a20-f4d9-11ea-0aca-659f1ede1fd9
-𝒜 = [FEEDₐ, IGNOREₐ]
+𝒜 = [CLEARofCONFLICTₐ, ACCELERATEₐ, DECELERATEₐ, ]
 
 # ╔═╡ d1b6ee9e-f61e-11ea-0619-d13585355550
 md"##### Observation Space"
 
 # ╔═╡ f4427ca2-f4d9-11ea-2822-e16314168c58
-𝒪 = [CRYINGₒ, QUIETₒ]
+𝒪 = [NoCDMₒ, CDMₒ]
 
 # ╔═╡ 2e6aff30-f61d-11ea-1f71-bb0a7c3aad2e
 md"""
@@ -161,31 +204,41 @@ For our initial state distribution, the baby is deterministically full (i.e. not
 """
 
 # ╔═╡ 02937ed0-f4da-11ea-1f82-cb56e99e5e20
-initialstate_distr = Deterministic(FULLₛ);
+initialstate_distr = Deterministic(SAFEₛ);
 
 # ╔═╡ eb932850-f4d6-11ea-3102-cbbf0e9d8189
 md"""
-### Transition Function
+### 2.3 Transition Function
 The transition dynamics are $T(s^\prime \mid s, a)$:
 
 $$\begin{align}
-T(\rm hungry \mid hungry, feed) &= 0\%\\
-T(\rm full \mid hungry, feed) &= 100\%
+T(\rm danger \mid danger, accelerate) &= 0\%\\
+T(\rm safe \mid safe, accelerate) &= 100\%
 \end{align}$$
 
 $$\begin{align}
-T(\rm hungry \mid full, feed) &= 0\%\\
-T(\rm full \mid full, feed) &= 100\%
+T(\rm danger \mid safe, accelerate) &= 0\%\\
+T(\rm safe \mid safe, accelerate) &= 100\%
 \end{align}$$
 
 $$\begin{align}
-T(\rm hungry \mid hungry, ignore)&= 100\%\\
-T(\rm full \mid hungry, ignore)&= 0\%\\
+T(\rm danger \mid danger, decelerate) &= 0\%\\
+T(\rm safe \mid safe, decelerate) &= 100\%
 \end{align}$$
 
 $$\begin{align}
-T(\rm hungry \mid full, ignore) &= 10\%\\
-T(\rm full \mid full, ignore) &= 90\%
+T(\rm danger \mid safe, decelerate) &= 0\%\\
+T(\rm safe \mid safe, decelerate) &= 100\%
+\end{align}$$
+
+$$\begin{align}
+T(\rm danger \mid danger, clearofconflict)&= 100\%\\
+T(\rm safe \mid danger, clearofconflict)&= 0\%\\
+\end{align}$$
+
+$$\begin{align}
+T(\rm danger \mid safe, clearofconflict) &= 10\%\\
+T(\rm safe \mid safe, clearofconflict) &= 90\%
 \end{align}$$
 
 Note we include the implied complements for completeness.
@@ -193,61 +246,66 @@ Note we include the implied complements for completeness.
 
 # ╔═╡ 3d57d840-f4d5-11ea-2744-c3e456949d67
 function T(s::State, a::Action)
-	p_h::Real = params.p_becomes_hungry
+	p_h::Real = params.p_to_collide
 
-	if a == FEEDₐ
-		return SparseCat([HUNGRYₛ, FULLₛ], [0, 1])
-	elseif s == HUNGRYₛ && a == IGNOREₐ
-		return SparseCat([HUNGRYₛ, FULLₛ], [1, 0])
-	elseif s == FULLₛ && a == IGNOREₐ
-		return SparseCat([HUNGRYₛ, FULLₛ], [p_h, 1-p_h])
+	if a == ACCELERATEₐ
+		return SparseCat([DANGERₛ, SAFEₛ], [0, 1])
+		
+	elseif a == DECELERATEₐ
+		return SparseCat([DANGERₛ, SAFEₛ], [0, 1])
+		
+	elseif s == DANGERₛ && a == CLEARofCONFLICTₐ
+		return SparseCat([DANGERₛ, SAFEₛ], [1, 0])
+		
+	elseif s == SAFEₛ && a == CLEARofCONFLICTₐ
+		return SparseCat([DANGERₛ, SAFEₛ], [p_h, 1-p_h])
 	end
 end
 
 # ╔═╡ d00d9b00-f4d7-11ea-3a5c-fdad48fabf71
 md"""
-### Observation Function
+### 2.4 Observation Function
 The observation function, or observation model, $O(o \mid s^\prime)$ is given by:
 
 $$\begin{align}
-O(\rm crying \mid hungry) &= 80\%\\
-O(\rm quiet \mid hungry) &= 20\%
+O(\rm CDM \mid danger) &= 90\%\\
+O(\rm NoCDM \mid danger) &= 10\%
 \end{align}$$
 
 $$\begin{align}
-O(\rm crying \mid full) &= 10\%\\
-O(\rm quiet \mid full) &= 90\%
+O(\rm CDM \mid safe) &= 10\%\\
+O(\rm NoCDM \mid safe) &= 90\%
 \end{align}$$
 """
 
 # ╔═╡ 61655130-f4d6-11ea-3aaf-53233c68b6a5
 function O(s::State, a::Action, s′::State)
-	if s′ == HUNGRYₛ
-		return SparseCat([CRYINGₒ, QUIETₒ],
-			             [params.p_crying_when_hungry, 1-params.p_crying_when_hungry])
-	elseif s′ == FULLₛ
-		return SparseCat([CRYINGₒ, QUIETₒ],
-			             [params.p_crying_when_full, 1-params.p_crying_when_full])
+	if s′ == DANGERₛ
+		return SparseCat([CDMₒ, NoCDMₒ],
+			             [params.p_CDM_when_safe, 1-params.p_CDM_when_danger])
+	elseif s′ == SAFEₛ
+		return SparseCat([CDMₒ, NoCDMₒ],
+			             [params.p_CDM_when_safe, 1-params.p_CDM_when_danger])
 	end
 end
 
 # ╔═╡ a78db25b-c324-4ffb-b39b-383768b0919c
-O(a::Action, s′::State) = O(FULLₛ, a, s′) # first s::State is unused
+O(a::Action, s′::State) = O(SAFEₛ, a, s′) # first s::State is unused
 
 # ╔═╡ 648d16b0-f4d9-11ea-0a53-39c0bfe2b4e1
 md"""
-### Reward Function
-The reward function is addative, meaning we get a reward of $r_\text{hungry}$ whenever the baby is hungry *plus* $r_\text{feed}$ whenever we feed the baby.
+### 2.5 Reward Function
+The reward function is addative, meaning we get a reward of $r_\text{collision}$ whenever the spacecraft is in danger *plus* $r_\text{feed}$ whenever we accelerate the baby.
 """
 
 # ╔═╡ 153496b0-f4d9-11ea-1cde-bbf92733afe3
 function R(s::State, a::Action)
-	return (s == HUNGRYₛ ? params.r_hungry : 0) + (a == FEEDₐ ? params.r_feed : 0)
+	return (s == DANGERₛ ? params.r_danger : 0) + (a == ACCELERATEₐ ? params.r_accelerate : 0) + (a == DECELERATEₐ ? params.r_decelerate : 0)
 end
 
 # ╔═╡ b664c3b0-f52a-11ea-1e44-71034541ace4
 md"
-### Discount Factor
+### 2.6 Discount Factor
 For an infinite horizon problem, we set the discount factor $\gamma \in [0,1]$ to a value where $\gamma < 1$ to discount future rewards.
 "
 
@@ -256,15 +314,15 @@ For an infinite horizon problem, we set the discount factor $\gamma \in [0,1]$ t
 
 # ╔═╡ b35776ca-6f61-47ee-ab37-48da09bbfb2b
 md"""
-### POMDP Structure using `QuickPOMDPs`
+### 2.7 POMDP Structure using `QuickPOMDPs`
 We again using `QuickPOMDPs.jl` to succinctly instantiate the crying baby POMDP.
 """
 
 # ╔═╡ 0aa6d08a-8d41-44d5-a1e5-85a6bcb92e81
-abstract type CryingBaby <: POMDP{State, Action, Observation} end
+abstract type SpacecraftCollisionAvoidance <: POMDP{State, Action, Observation} end
 
 # ╔═╡ a858eddc-716b-49ac-864f-04c46b816ab6
-pomdp = QuickPOMDP(CryingBaby,
+pomdp = QuickPOMDP(SpacecraftCollisionAvoidance,
     states       = 𝒮,
     actions      = 𝒜,
 	observations = 𝒪,
@@ -276,7 +334,7 @@ pomdp = QuickPOMDP(CryingBaby,
 
 # ╔═╡ 704ea980-f4db-11ea-01db-233562722c4d
 md"""
-### Policy
+### 2.8 Policy
 We create a simple `Policy` type with an associated `POMDPs.action` function which always feeds the baby when we it's crying.
 
 The `POMDPs.action(π, s)` function maps the current state $s$ (or belief state $b(s)$ for POMDPs) to an action $a$ given a policy $\pi$.
@@ -289,26 +347,34 @@ $$\begin{align}
 
 # ╔═╡ d2a3f220-f52b-11ea-2360-bf797a6f9374
 md"""
-For the simple case, let's define a policy where we alway feed when we observe the baby crying.
+For the simple case, we define 2 policies when we observe the CDM:
 """
 
 # ╔═╡ f3b9f270-f52b-11ea-2f2e-ef56d5522ffb
-struct FeedWhenCrying <: Policy end
+struct AccelerateWhenCDM <: Policy end
+
+# ╔═╡ 9373ebc5-efde-4a92-ad2c-a92ad58d7a80
+# ATTENTION: only defining policy to ACCELERATE in simple model => will have to enhance by implementing a policy to DECELERATE
+# struct DecelerateWhenCDM <: Policy end
 
 # ╔═╡ ea5c5ff0-f52c-11ea-2d8f-73cdc0137343
-md"And a policy that feeds the baby when we believe it to be hungry."
+md"And two policies that make the spacecraft accelerate or decelerate when we believe it to be in danger:"
 
 # ╔═╡ 473d77c0-f4da-11ea-0af5-7f7690f39566
-struct FeedWhenBelievedHungry <: Policy end
+struct AccelerateWhenBelievedDanger <: Policy end
+
+# ╔═╡ df1a89c8-28fe-428f-b31b-6d2ea48616bc
+# ATTENTION: only defining policy to ACCELERATE in simple model => will have to enhance by implementing a policy to DECELERATE
+# struct DecelerateWhenBelievedDanger <: Policy end
 
 # ╔═╡ 072fd490-f52d-11ea-390a-5f0c9d8be485
 md"""
-### Belief
+### 2.9 Belief
 
-Our `Belief` type is a vector of probabilities representing our belief that the baby is hungry.
+Our `Belief` type is a vector of probabilities representing our belief that the spacecraft is in danger:
 
 $$\begin{align}
-\mathbf{b} = \biggl[p(\text{hungry}), \;\; p(\text{full})\biggr]
+\mathbf{b} = \biggl[p(\text{danger}), \;\; p(\text{safe})\biggr]
 \end{align}$$
 
 The belief vector must be non-negative and sum to 1 to make it a valid probability distribution.
@@ -319,40 +385,45 @@ const Belief = Vector{Real};
 
 # ╔═╡ 39d07e40-f52d-11ea-33a6-7b31da19d683
 md"""
-##### Exercise: Policies
-We filled out the `action` function for the `FeedWhenCrying` policy, now you can fill out the `action` function for the `FeedWhenBelievedHungry` policy.
+##### Policies
 """
+
+# ╔═╡ 1a991add-b9f9-4140-a2cf-194963a8b22c
+md"""**Observation Policies**"""
 
 # ╔═╡ 9a438026-93f9-4ca4-9cba-89d8c4c23cdd
 """Simple policy with takes in the previous observation in place of the belief."""
-function POMDPs.action(::FeedWhenCrying, o::Observation)
-	return o == CRYINGₒ ? FEEDₐ : IGNOREₐ
+function POMDPs.action(::AccelerateWhenCDM, o::Observation)
+	return o == CDMₒ ? ACCELERATEₐ : CLEARofCONFLICTₐ
 end;
 
+# ╔═╡ 1c59e5f5-e644-4ade-9ade-b55203e2d80b
+md"""**Belief Policies**"""
+
 # ╔═╡ fb777410-f52b-11ea-294b-77b36ef4f6b3
-"""Policy that feeds the baby when our belief is stronger towards being hungry"""
-function POMDPs.action(::FeedWhenBelievedHungry, b::Belief)
-	return b[1] > b[2] ? FEEDₐ : IGNOREₐ
+"""Policy that make the spacecraft accelerate when our belief is stronger towards being in danger"""
+function POMDPs.action(::AccelerateWhenBelievedDanger, b::Belief)
+	return b[1] > b[2] ? ACCELERATEₐ : CLEARofCONFLICTₐ
 end;
 
 # ╔═╡ 2a144c90-f4db-11ea-3a54-bdb5002577f1
 md"""
-### Belief Updater
+### 2.10 Belief Updater
 Belief updaters are provided by the [BeliefUpdaters.jl](https://github.com/JuliaPOMDP/BeliefUpdaters.jl) package.
 """
 
 # ╔═╡ 1687b4e0-f52c-11ea-04f0-b36f816b46c1
 md"""
 ##### Discrete Belief Update
-Let's run through an example decision process, first defining a discrete belief updater for our problem. This "belief updater" is a Bayesian filter that will update the current belief of the babies _actual state_ (which we cannot observe directly), using observation that we _can_ get (i.e. `crying` or `quiet`).
+Let's run through an example decision process, first defining a discrete belief updater for our problem. This "belief updater" is a Bayesian filter that will update the current belief of the spacecraft & debris _actual state_ (which we cannot observe directly), using observation that we _can_ get (i.e. `CDM` or `NoCDM`).
 """
 
 # ╔═╡ 25079370-f525-11ea-1c0a-ad5e0b53744a
-updater(pomdp::QuickPOMDP{CryingBaby}) = DiscreteUpdater(pomdp);
+updater(pomdp::QuickPOMDP{SpacecraftCollisionAvoidance}) = DiscreteUpdater(pomdp);
 
 # ╔═╡ 78cfbd1c-690a-42a2-8ebe-f50df761a03f
 md"""
-We start out with a uniform belief over where $p(\texttt{hungry}) = 0.5$ and $p(\texttt{full})=0.5$.
+We start out with a uniform belief over where $p(\texttt{danger}) = 0.5$ and $p(\texttt{safe})=0.5$.
 """
 
 # ╔═╡ 13ec6d00-f4de-11ea-3cad-057e7556d7a0
@@ -368,72 +439,72 @@ update(::Updater, belief_old, action, observation)
 
 # ╔═╡ 8c7b3020-f525-11ea-0518-232981a16f99
 begin
-	a1 = IGNOREₐ
-	o1 = CRYINGₒ
+	a1 = CLEARofCONFLICTₐ
+	o1 = CDMₒ
 	b1 = update(updater(pomdp), b0, a1, o1)
 	b1.b
 end
 
 # ╔═╡ 84573fe4-d895-4076-94ca-adfeba1b2641
 md"""
-Then we choose to ignore the baby ($a_1=\texttt{ignore}$) and observe the baby crying ($o_1=\texttt{crying}$). This belief vector of [$(round.(b1.b,digits=5))] says there is a $(round(b1.b[1], digits=5)) probability that the baby is _actually_ hungry (meaning it's true state is `hungry`), and a $(round(b1.b[2], digits=5)) probability that the baby is _actually_ full.
+Then we choose to do nothing with the spacecraft ($a_1=\texttt{clear of conflict}$) and observe the spacecraft receiving a CDM ($o_1=\texttt{CDM}$). This belief vector of [$(round.(b1.b,digits=5))] says there is a $(round(b1.b[1], digits=5)) probability that the spacecraft is _actually_ in danger (meaning it's true state is `danger`), and a $(round(b1.b[2], digits=5)) probability that the spacecraft is _actually_ safe.
 """
 
 # ╔═╡ c86f8021-c6b8-44dd-868a-f97270a147c3
 md"""
-Next, we feed the baby ($a=\texttt{feed}$) and observe that it is quiet (which we defined to be deterministic, meaning that the baby will _always_ become full when we feed it, thus we would expect the observation of `quiet`).
+Next, we make the spacecraft accelerate ($a=\texttt{accelerate}$) and observe that it is safe (which we defined to be deterministic, meaning that the spacecraft will _always_ become safe when we accelerate, thus we would expect the observation of `NoCDM`).
 """
 
 # ╔═╡ bae44aa0-f525-11ea-1450-837eb93e42a5
 begin
-	a2 = FEEDₐ
-	o2 = QUIETₒ
+	a2 = ACCELERATEₐ
+	o2 = NoCDMₒ
 	b2 = update(updater(pomdp), b1, a2, o2)
 	b2.b
 end
 
 # ╔═╡ 88c62826-fa38-4014-a814-47b4fe9489aa
 md"""
-Then we ignore the baby and observe it is (again) quiet.
+Then we do nothing with the spacecraft and observe it receives (again) no CDM.
 """
 
 # ╔═╡ ed4efac0-f526-11ea-283e-a5726ef507ae
 begin
-	a3 = IGNOREₐ
-	o3 = QUIETₒ
+	a3 = CLEARofCONFLICTₐ
+	o3 = NoCDMₒ
 	b3 = update(updater(pomdp), b2, a3, o3)
 	b3.b
 end
 
 # ╔═╡ 53c1defa-9495-43c0-afad-ddbb7716fc23
 md"""
-We continue to ignore the baby, and continue to see it is quiet.
+We continue to do nothing with the spacecraft, and continue to see it receives no CDM.
 """
 
 # ╔═╡ fdb129b0-f526-11ea-0f61-b9c4b2356efa
 begin
-	a4 = IGNOREₐ
-	o4 = QUIETₒ
+	a4 = CLEARofCONFLICTₐ
+	o4 = NoCDMₒ
 	b4 = update(updater(pomdp), b3, a4, o4)
 	b4.b
 end
 
 # ╔═╡ fc03234f-1b89-4735-a447-7082998a6110
 md"""
-We ignore the baby once more, but this time we observe the baby to be crying, thus our belief that the baby is _actually_ hungry leans towards _hungry_ (only slightly more than uniform).
+We do nothing with the spacecraft once more, but this time we observe that the spacecraft receives a CDM , thus our belief that the spacecraft is _actually_ in danger leans towards _danger_ (only slightly more than uniform).
 """
 
 # ╔═╡ 0c9e92f0-f527-11ea-1fc2-71bb41a0405a
 begin
-	a5 = IGNOREₐ
-	o5 = CRYINGₒ
+	a5 = CLEARofCONFLICTₐ
+	o5 = CDMₒ
 	b5 = update(updater(pomdp), b4, a5, o5)
 	b5.b
 end
 
 # ╔═╡ 0fea57a0-f4dc-11ea-3133-571b9a56d25b
 md"""
-## Solutions: _Offline_
+## 3. Solutions: _Offline_
 As with POMDPs, we can solve for a policy either _offline_ (to generate a full mapping from _beliefs_ to _actions_ for all _states_) or _online_ to only generate a mapping from the current belief state to the next action.
 
 Solution methods typically follow the defined `POMDPs.jl` interface syntax:
@@ -446,7 +517,7 @@ policy = solve(solver, pomdp)   # solves the POMDP and returns a policy
 
 # ╔═╡ 0aa2497d-f979-46ee-8e93-98cb35706963
 md"""
-### Policy Representation: Alpha Vectors
+### 3.1 Policy Representation: Alpha Vectors
 Since we do not know the current state exactly, we can compute the *utility* of our belief *b*
 
 $$U(b) = \sum_s b(s)U(s) = \mathbf{α}^\top \mathbf{b}$$
@@ -456,8 +527,8 @@ where $\mathbf{α}$ is called an _alpha vector_ that contains the expected utili
 
 # ╔═╡ cfef767b-211f-40d6-af02-3ad0635ffa85
 md"""
-### QMDP
-To solve the POMDP, we first need a *solver*. We'll use the QMDP solver$^3$ from `QMDP.jl`. QMDP will treat each belief state as the true state (thus turning it into an MDP), and then use value iteration to solve that MDP.
+### 3.2 QMDP
+To solve the POMDP, we first need a *solver*. We'll use the QMDP solver$^3$ from `QMDP.jl`. QMDP will treat each belief state as the true state (thus turning it into an MDP), and then use **value iteration** to solve that MDP.
 
 $$\alpha_a^{(k+1)}(s) = R(s,a) + \gamma\sum_{s'}T(s'\mid s, a)\max_{a'}\alpha_{a'}^{(k)}(s')$$
 """
@@ -465,9 +536,13 @@ $$\alpha_a^{(k+1)}(s) = R(s,a) + \gamma\sum_{s'}T(s'\mid s, a)\max_{a'}\alpha_{a
 # ╔═╡ 1e14b800-f529-11ea-320b-59280510d94c
 md"*Now we solve the POMDP to create the policy. Note the policy type of `AlphaVectorPolicy`.*"
 
+# ╔═╡ 34b98892-1167-41bc-8907-06d5b63da213
+# Given a belief vector...
+𝐛 = [0.8, 0.2]
+
 # ╔═╡ 70c99bb2-f524-11ea-1509-79b6ce54df1f
 md"""
-### Fast Informed Bound (FIB)
+### 3.3 Fast Informed Bound (FIB)
 Another _offline_ POMDP solver is the _fast informed bound_ (FIB)$^2$. FIB actually uses information from the observation model $O$ (i.e. "informed").
 
 $$\alpha_a^{(k+1)}(s) = R(s,a) + \gamma\sum_o\max_{a'}\sum_{s'}O(o \mid a,s')T(s'\mid s, a)\alpha_{a'}^{(k)}(s')$$
@@ -483,7 +558,7 @@ fib_policy = solve(fib_solver, pomdp)
 
 # ╔═╡ 37d81c83-51a6-49a6-800d-1d2d241f5e29
 md"""
-### Point-Based Value Iteration (PBVI)
+### 3.4 Point-Based Value Iteration (PBVI)
 _Point-based value iteration_ provides a lower bound and operates on a finite set of $m$ beliefs $B=\{\mathbf{b}_1, \ldots, \mathbf{b}_m\}$, each with an associated alpha vector $\Gamma = \{\boldsymbol{\alpha}_1, \ldots, \boldsymbol{\alpha}_m\}$. These alpha vector define an _approximately optimal value function_:
 
 $$U^\Gamma(\mathbf{b}) = \max_{\boldsymbol\alpha \in \Gamma}\boldsymbol\alpha^\top\mathbf{b}$$
@@ -514,7 +589,7 @@ pbvi_policy = solve(pbvi_solver, pomdp)
 
 # ╔═╡ 6ea123be-f4df-11ea-21d2-71b166bb066a
 md"""
-## Visualizing Alpha Vectors
+## 4. Visualizing Alpha Vectors
 **_Recall_**: Since we do not know the current state exactly, we can compute the *utility* of our belief *b*
 
 $$U(b) = \sum_s b(s)U(s) = \mathbf{α}^\top \mathbf{b}$$
@@ -561,11 +636,11 @@ function plot_alpha_vectors(policy, p_hungry, label="QMDP")
 	ylims!(-40, 5)
 end
 
+# ╔═╡ 53b584db-e716-4090-a19e-4530d8694c65
+[p_to_collide, 1-p_to_collide]
+
 # ╔═╡ ebe99578-a11c-4c30-a33f-10e78614a70e
 @bind p_hungry Slider(0:0.01:1, default=0.5, show_value=true)
-
-# ╔═╡ 53b584db-e716-4090-a19e-4530d8694c65
-[p_hungry, 1-p_hungry]
 
 # ╔═╡ d4f99682-76ce-4ebc-828b-cff812d4ff56
 @bind qmdp_iters Slider(0:60, default=60, show_value=true)
@@ -576,8 +651,12 @@ qmdp_solver = QMDPSolver(max_iterations=qmdp_iters);
 # ╔═╡ 3fea65d0-f4dc-11ea-3531-6de282399dce
 qmdp_policy = solve(qmdp_solver, pomdp)
 
+# ╔═╡ 30f07d08-229c-4c73-a7d3-51c4c301dc1c
+#Query policy for an action
+a = action(qmdp_policy, 𝐛)
+
 # ╔═╡ a8460253-884f-474c-9d21-a7d3ee261120
-plot_alpha_vectors(qmdp_policy, p_hungry)
+plot_alpha_vectors(qmdp_policy, p_to_collide)
 
 # ╔═╡ a4883a50-39df-4875-8554-30c97240b53d
 action(qmdp_policy, [p_hungry, 1-p_hungry])
@@ -600,7 +679,7 @@ $$\begin{align}
 
 # ╔═╡ da57eb54-db90-42c2-ad30-8479ea2ff857
 md"""
-### Dominanting alpha vectors
+### 4.1 Dominanting alpha vectors
 To show the piecewise combination of the dominant alpha vectors, here we plot the combination and color the portion of the vector that corresponds to the two actions: $\texttt{feed}$ and $\texttt{ignore}$.
 """
 
@@ -692,7 +771,7 @@ end
 
 # ╔═╡ fb06f470-cba7-4a46-b997-bc3f8b7da7e1
 md"""
-### PBVI alpha vector
+### 4.2 PBVI alpha vector
 We now show how the PBVI algorithm selects the dominant alpha vector.
 """
 
@@ -701,9 +780,6 @@ We now show how the PBVI algorithm selects the dominant alpha vector.
 
 # ╔═╡ 347ed884-bf27-4364-9ab9-f51795a38852
 plot_alpha_vectors(pbvi_policy, p, "PBVI")
-
-# ╔═╡ 26869db9-4400-4d5a-ba3d-a6d2d7c79c4e
-𝐛 = [p, 1-p]
 
 # ╔═╡ 01f371b8-7717-4f31-849e-9062ed79953c
 action(pbvi_policy, 𝐛)
@@ -740,7 +816,7 @@ end
 
 # ╔═╡ 2262f5e0-f60d-11ea-3744-c569380f8d28
 md"""
-## Solutions: _Online_
+## 5. Solutions: _Online_
 We can solve POMDPs online to produce a `planner` which we then query for an action *online*.
 """
 
@@ -767,41 +843,46 @@ tree = D3Tree(info[:tree], init_expand=3)
 
 # ╔═╡ 71406b44-9eed-4e18-b0e8-d1b723d943aa
 md"""
-## Concise POMDP definition
+## 6. Concise POMDP definition
 
 ```julia
 using POMDPs, POMDPModelTools, QuickPOMDPs
 
-@enum State hungry full
-@enum Action feed ignore
-@enum Observation crying quiet
+@enum State danger safe
+@enum Action clearofconflict accelerate decelerate
+@enum Observation CDM NoCDM
 
 pomdp = QuickPOMDP(
-    states       = [hungry, full],  # 𝒮
-    actions      = [feed, ignore],  # 𝒜
-    observations = [crying, quiet], # 𝒪
-    initialstate = [full],          # Deterministic initial state
+    states       = [danger, safe],  # 𝒮
+    actions      = [clearofconflict, accelerate, decelerate],  # 𝒜
+    observations = [CDM, NoCDM], # 𝒪
+    initialstate = [safe],          # Deterministic initial state
     discount     = 0.9,             # γ
 
     transition = function T(s, a)
-        if a == feed
-            return SparseCat([hungry, full], [0, 1])
-        elseif s == hungry && a == ignore
-            return SparseCat([hungry, full], [1, 0])
-        elseif s == full && a == ignore
-            return SparseCat([hungry, full], [0.1, 0.9])
+        if a == accelerate
+            return SparseCat([danger, safe], [0, 1])
+
+		elseif a == decelerate
+            return SparseCat([danger, safe], [0, 1])
+
+		elseif s == danger && a == clearofconflict
+            return SparseCat([danger, safe], [1, 0])
+
+		elseif s == safe && a == clearofconflict
+            return SparseCat([danger, safe], [0.1, 0.9])
         end
     end,
 
     observation = function O(s, a, s′)
-        if s′ == hungry
-            return SparseCat([crying, quiet], [0.8, 0.2])
-        elseif s′ == full
-            return SparseCat([crying, quiet], [0.1, 0.9])
+        if s′ == danger
+            return SparseCat([CDM, NoCDM], [0.9, 0.1])
+		elseif s′ == safe
+            return SparseCat([CDM, NoCDM], [0.1, 0.9])
         end
     end,
 
-    reward = (s,a)->(s == hungry ? -10 : 0) + (a == feed ? -5 : 0)
+    reward = (s,a)->(s == danger ? -10 : 0) + (a == accelerate ? -5 : 0) + (a == 		decelerate ? -5 : 0)
 )
 
 # Solve POMDP
@@ -837,14 +918,14 @@ begin
 end
 
 # ╔═╡ ce584a40-f521-11ea-2119-01ed93a3f7cc
-if POMDPs.action(FeedWhenBelievedHungry(), Real[0,1]) == IGNOREₐ && POMDPs.action(FeedWhenBelievedHungry(), Real[1,0]) == FEEDₐ
-	if POMDPs.action(FeedWhenBelievedHungry(), Real[0.5, 0.5]) == FEEDₐ
+if POMDPs.action(AccelerateWhenBelievedDanger(), Real[0,1]) == CLEARofCONFLICTₐ && POMDPs.action(AccelerateWhenBelievedDanger(), Real[1,0]) == ACCELERATEₐ
+	if POMDPs.action(AccelerateWhenBelievedDanger(), Real[0.5, 0.5]) == ACCELERATEₐ
 		almost(md"Err on the side of ignoring when there are uniform beliefs.")
 	else
-		correct(md"That's right! A simple policy to feed the baby when crying.")
+		correct(md"That's right! A simple policy to make the spacecraft accelerate when CDM is received.")
 	end
 else
-	keep_working(md"We want to `feed` the baby when we believe it's hungry, and `ignore` otherwise.")
+	keep_working(md"We want to `accelerate` the spacecraft when we believe it's in danger, and `do nothing` otherwise.")
 end
 
 # ╔═╡ dae97d90-f52d-11ea-08c5-bd13a9acbb8a
@@ -2070,9 +2151,11 @@ version = "0.9.1+5"
 # ╟─746961b0-f4b6-11ea-3289-03b36dffbea7
 # ╟─a88c0bf0-f4c0-11ea-0e61-853ac9a0c0cb
 # ╟─32c56c10-f4d2-11ea-3c79-3dc8b852c182
-# ╠═a13e36e0-f4d2-11ea-28cf-d18a43e34c3e
+# ╟─a13e36e0-f4d2-11ea-28cf-d18a43e34c3e
 # ╟─dbc77e50-f529-11ea-0d79-71196165ac17
-# ╠═222c7568-d9b3-4148-9800-c42372969c14
+# ╟─222c7568-d9b3-4148-9800-c42372969c14
+# ╟─33b27b26-2b32-4620-9212-262fb30fcbbd
+# ╟─67a7ce56-5cff-432c-96a2-08098bb8af44
 # ╠═bd6724d1-3067-4285-9ee0-c0b1363e8243
 # ╠═647c5372-a632-42ae-ab32-ea6ad491b0b6
 # ╟─b2a53c8e-f4db-11ea-08ba-67b9158f39b3
@@ -2091,8 +2174,8 @@ version = "0.9.1+5"
 # ╟─eb932850-f4d6-11ea-3102-cbbf0e9d8189
 # ╠═3d57d840-f4d5-11ea-2744-c3e456949d67
 # ╟─d00d9b00-f4d7-11ea-3a5c-fdad48fabf71
-# ╠═61655130-f4d6-11ea-3aaf-53233c68b6a5
-# ╠═a78db25b-c324-4ffb-b39b-383768b0919c
+# ╟─61655130-f4d6-11ea-3aaf-53233c68b6a5
+# ╟─a78db25b-c324-4ffb-b39b-383768b0919c
 # ╟─648d16b0-f4d9-11ea-0a53-39c0bfe2b4e1
 # ╠═153496b0-f4d9-11ea-1cde-bbf92733afe3
 # ╟─b664c3b0-f52a-11ea-1e44-71034541ace4
@@ -2104,12 +2187,16 @@ version = "0.9.1+5"
 # ╠═fd7f872d-7ef2-4987-af96-4ca4573f29fc
 # ╟─d2a3f220-f52b-11ea-2360-bf797a6f9374
 # ╠═f3b9f270-f52b-11ea-2f2e-ef56d5522ffb
+# ╠═9373ebc5-efde-4a92-ad2c-a92ad58d7a80
 # ╟─ea5c5ff0-f52c-11ea-2d8f-73cdc0137343
 # ╠═473d77c0-f4da-11ea-0af5-7f7690f39566
+# ╠═df1a89c8-28fe-428f-b31b-6d2ea48616bc
 # ╟─072fd490-f52d-11ea-390a-5f0c9d8be485
 # ╠═b9439a52-f522-11ea-3caf-2b4bf635b887
 # ╟─39d07e40-f52d-11ea-33a6-7b31da19d683
+# ╟─1a991add-b9f9-4140-a2cf-194963a8b22c
 # ╠═9a438026-93f9-4ca4-9cba-89d8c4c23cdd
+# ╟─1c59e5f5-e644-4ade-9ade-b55203e2d80b
 # ╠═fb777410-f52b-11ea-294b-77b36ef4f6b3
 # ╟─ce584a40-f521-11ea-2119-01ed93a3f7cc
 # ╟─dae97d90-f52d-11ea-08c5-bd13a9acbb8a
@@ -2136,6 +2223,8 @@ version = "0.9.1+5"
 # ╠═1ae7c200-f4dc-11ea-29c1-b3710f89f475
 # ╟─1e14b800-f529-11ea-320b-59280510d94c
 # ╠═3fea65d0-f4dc-11ea-3531-6de282399dce
+# ╠═34b98892-1167-41bc-8907-06d5b63da213
+# ╠═30f07d08-229c-4c73-a7d3-51c4c301dc1c
 # ╟─70c99bb2-f524-11ea-1509-79b6ce54df1f
 # ╠═9cdc9132-f524-11ea-2051-41beccfeb0e4
 # ╠═b2c4ef60-f524-11ea-02eb-434f1eed5a99

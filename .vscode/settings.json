@@ -1,0 +1,65 @@
+{
+    "terminal.integrated.inheritEnv": false,
+    "editor.suggestSelection": "first",
+    "vsintellicode.modify.editor.suggestSelection": "automaticallyOverrodeDefaultValue",
+    "editor.formatOnSave": true,
+    "workbench.startupEditor": "newUntitledFile",
+    "editor.renderWhitespace": "none",
+    "editor.renderControlCharacters": false,
+    "python.jediEnabled": false,
+    "kite.showWelcomeNotificationOnStartup": false,
+    "C_Cpp.updateChannel": "Insiders",
+    "terminal.integrated.shell.osx": "/bin/bash",
+    "[json]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "vsicons.associations.fileDefault.file": {},
+    "python.pythonPath": "/usr/local/bin/python3",
+    "javascript.updateImportsOnFileMove.enabled": "always",
+    "workbench.editorAssociations": {
+      "*.ipynb": "jupyter.notebook.ipynb"
+    },
+    "python.formatting.provider": "black",
+    "python.defaultInterpreterPath": "/usr/local/bin/python3",
+    "python.languageServer": "Default",
+    "vsicons.dontShowNewVersionMessage": true,
+    "security.workspace.trust.untrustedFiles": "open",
+    "notebook.markup.fontSize": 12,
+    "notebook.outputFontSize": 12,
+    "workbench.preferredLightColorTheme": "Visual Studio Light",
+    "workbench.colorTheme": "Default Light+",
+    "terminal.integrated.profiles.osx": {
+      "zsh": {
+        "path": "zsh",
+        "args": ["-l"]
+      },
+      "bash": {
+        "path": "bash",
+        "args": ["-l"],
+        "icon": "terminal-bash"
+      },
+      "fish": {
+        "path": "fish",
+        "args": ["-l"]
+      },
+      "tmux": {
+        "path": "tmux",
+        "icon": "terminal-tmux"
+      },
+      "pwsh": {
+        "path": "pwsh",
+        "icon": "terminal-powershell"
+      }
+    },
+    "terminal.integrated.defaultProfile.osx": "zsh",
+    "jupyter.widgetScriptSources": ["jsdelivr.com", "unpkg.com"],
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "[javascriptreact]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+  }

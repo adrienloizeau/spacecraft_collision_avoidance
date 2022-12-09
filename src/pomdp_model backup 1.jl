@@ -51,7 +51,7 @@ using BasicPOMCP
 using D3Trees
 
 # ╔═╡ a88c0bf0-f4c0-11ea-0e61-853ac9a0c0cb
-md"## Partially Observable MDP (POMDP)"
+md"## 1. Partially Observable MDP (POMDP)"
 
 # ╔═╡ 32c56c10-f4d2-11ea-3c79-3dc8b852c182
 md"""
@@ -75,7 +75,7 @@ Indeed, the agent receives _observations_ of the current state rather than the t
 """
 
 # ╔═╡ a13e36e0-f4d2-11ea-28cf-d18a43e34c3e
-md"### Set of State variables $\mathcal{S}$
+md"### 1.1 Set of State variables $\mathcal{S}$
 The *state* set in our problem is composed of both $satellite$ and $debris$ respective state *variables*.
 
 **Orbit location $satellite$**
@@ -119,7 +119,7 @@ $$\begin{align}
 
 
 # ╔═╡ 222c7568-d9b3-4148-9800-c42372969c14
-md"""### Set of Actions $\mathcal{A}$
+md"""### 1.2 Set of Actions $\mathcal{A}$
 The *actions* set in our problem is composed of clear $advisories$ to be given as **instructions** to the satellite.
 
 $$\begin{align}
@@ -132,11 +132,11 @@ $$\begin{align}
 """
 
 # ╔═╡ 33b27b26-2b32-4620-9212-262fb30fcbbd
-md"## Julia Model"
+md"## 2. Julia Model"
 
 # ╔═╡ 67a7ce56-5cff-432c-96a2-08098bb8af44
 md"""
-### Parameters
+### 2.1 Parameters
 We define *hardcoded* parameters to be tweaked.
 """
 
@@ -165,7 +165,7 @@ We get the sparse categorical distribution (`SparseCat`) from `POMDPModelTools`,
 
 # ╔═╡ be1258b0-f4db-11ea-390e-2bcc849111d0
 md"""
-### State, Action, and Observation Spaces
+### 2.2 State, Action, and Observation Spaces
 We define enumerations for our states, actions, and observations using Julia's built-in `@enum`.
 """
 
@@ -264,12 +264,8 @@ end
 
 # ╔═╡ d00d9b00-f4d7-11ea-3a5c-fdad48fabf71
 md"""
-### Observation Function
+### 2.4 Observation Function
 The observation function, or observation model, $O(o \mid s^\prime)$ is given by:
-
-$$P(o_t = o| S_t = s)$$
-
-thus we have
 
 $$\begin{align}
 O(\rm CDM \mid danger) &= 90\%\\
@@ -298,8 +294,8 @@ O(a::Action, s′::State) = O(SAFEₛ, a, s′) # first s::State is unused
 
 # ╔═╡ 648d16b0-f4d9-11ea-0a53-39c0bfe2b4e1
 md"""
-### Reward Function
-The reward function is addative, meaning we get a reward of $r_\text{danger}$ whenever the spacecraft is in danger *plus* $r_\text{accelerate}$ whenever we accelerate the spacecraft or *plus* $r_\text{decelerate}$ whenever we decelerate the spacecraft.
+### 2.5 Reward Function
+The reward function is addative, meaning we get a reward of $r_\text{collision}$ whenever the spacecraft is in danger *plus* $r_\text{feed}$ whenever we accelerate the baby.
 """
 
 # ╔═╡ 153496b0-f4d9-11ea-1cde-bbf92733afe3
@@ -309,7 +305,7 @@ end
 
 # ╔═╡ b664c3b0-f52a-11ea-1e44-71034541ace4
 md"
-### Discount Factor
+### 2.6 Discount Factor
 For an infinite horizon problem, we set the discount factor $\gamma \in [0,1]$ to a value where $\gamma < 1$ to discount future rewards.
 "
 
@@ -318,8 +314,8 @@ For an infinite horizon problem, we set the discount factor $\gamma \in [0,1]$ t
 
 # ╔═╡ b35776ca-6f61-47ee-ab37-48da09bbfb2b
 md"""
-### POMDP Structure using `QuickPOMDPs`
-We again using `QuickPOMDPs.jl` to succinctly instantiate the Spacecraft Collision Avoidance POMDP.
+### 2.7 POMDP Structure using `QuickPOMDPs`
+We again using `QuickPOMDPs.jl` to succinctly instantiate the crying baby POMDP.
 """
 
 # ╔═╡ 0aa6d08a-8d41-44d5-a1e5-85a6bcb92e81
@@ -338,8 +334,8 @@ pomdp = QuickPOMDP(SpacecraftCollisionAvoidance,
 
 # ╔═╡ 704ea980-f4db-11ea-01db-233562722c4d
 md"""
-### Policy
-We create a simple `Policy` type with an associated `POMDPs.action` function which always accelerate the spacecraft when it's in danger.
+### 2.8 Policy
+We create a simple `Policy` type with an associated `POMDPs.action` function which always feeds the baby when we it's crying.
 
 The `POMDPs.action(π, s)` function maps the current state $s$ (or belief state $b(s)$ for POMDPs) to an action $a$ given a policy $\pi$.
 
@@ -373,7 +369,7 @@ struct AccelerateWhenBelievedDanger <: Policy end
 
 # ╔═╡ 072fd490-f52d-11ea-390a-5f0c9d8be485
 md"""
-### Belief
+### 2.9 Belief
 
 Our `Belief` type is a vector of probabilities representing our belief that the spacecraft is in danger:
 
@@ -412,14 +408,14 @@ end;
 
 # ╔═╡ 2a144c90-f4db-11ea-3a54-bdb5002577f1
 md"""
-### Belief Updater
+### 2.10 Belief Updater
 Belief updaters are provided by the [BeliefUpdaters.jl](https://github.com/JuliaPOMDP/BeliefUpdaters.jl) package.
 """
 
 # ╔═╡ 1687b4e0-f52c-11ea-04f0-b36f816b46c1
 md"""
 ##### Discrete Belief Update
-Let's run through an example decision process, first defining a discrete belief updater for our problem. This "belief updater" is a **Bayesian filter** that will update the current belief of the spacecraft & debris _actual state_ (which we cannot observe directly), using observation that we _can_ get (i.e. `CDM` or `NoCDM`).
+Let's run through an example decision process, first defining a discrete belief updater for our problem. This "belief updater" is a Bayesian filter that will update the current belief of the spacecraft & debris _actual state_ (which we cannot observe directly), using observation that we _can_ get (i.e. `CDM` or `NoCDM`).
 """
 
 # ╔═╡ 25079370-f525-11ea-1c0a-ad5e0b53744a
@@ -508,7 +504,7 @@ end
 
 # ╔═╡ 0fea57a0-f4dc-11ea-3133-571b9a56d25b
 md"""
-## Solutions: _Offline_
+## 3. Solutions: _Offline_
 As with POMDPs, we can solve for a policy either _offline_ (to generate a full mapping from _beliefs_ to _actions_ for all _states_) or _online_ to only generate a mapping from the current belief state to the next action.
 
 Solution methods typically follow the defined `POMDPs.jl` interface syntax:
@@ -521,7 +517,7 @@ policy = solve(solver, pomdp)   # solves the POMDP and returns a policy
 
 # ╔═╡ 0aa2497d-f979-46ee-8e93-98cb35706963
 md"""
-### Policy Representation: Alpha Vectors
+### 3.1 Policy Representation: Alpha Vectors
 Since we do not know the current state exactly, we can compute the *utility* of our belief *b*
 
 $$U(b) = \sum_s b(s)U(s) = \mathbf{α}^\top \mathbf{b}$$
@@ -531,7 +527,7 @@ where $\mathbf{α}$ is called an _alpha vector_ that contains the expected utili
 
 # ╔═╡ cfef767b-211f-40d6-af02-3ad0635ffa85
 md"""
-### QMDP
+### 3.2 QMDP
 To solve the POMDP, we first need a *solver*. We'll use the QMDP solver$^3$ from `QMDP.jl`. QMDP will treat each belief state as the true state (thus turning it into an MDP), and then use **value iteration** to solve that MDP.
 
 $$\alpha_a^{(k+1)}(s) = R(s,a) + \gamma\sum_{s'}T(s'\mid s, a)\max_{a'}\alpha_{a'}^{(k)}(s')$$
@@ -546,7 +542,7 @@ md"*Now we solve the POMDP to create the policy. Note the policy type of `AlphaV
 
 # ╔═╡ 70c99bb2-f524-11ea-1509-79b6ce54df1f
 md"""
-### Fast Informed Bound (FIB)
+### 3.3 Fast Informed Bound (FIB)
 Another _offline_ POMDP solver is the _fast informed bound_ (FIB)$^2$. FIB actually uses information from the observation model $O$ (i.e. "informed").
 
 $$\alpha_a^{(k+1)}(s) = R(s,a) + \gamma\sum_o\max_{a'}\sum_{s'}O(o \mid a,s')T(s'\mid s, a)\alpha_{a'}^{(k)}(s')$$
@@ -562,7 +558,7 @@ fib_policy = solve(fib_solver, pomdp)
 
 # ╔═╡ 37d81c83-51a6-49a6-800d-1d2d241f5e29
 md"""
-### Point-Based Value Iteration (PBVI)
+### 3.4 Point-Based Value Iteration (PBVI)
 _Point-based value iteration_ provides a lower bound and operates on a finite set of $m$ beliefs $B=\{\mathbf{b}_1, \ldots, \mathbf{b}_m\}$, each with an associated alpha vector $\Gamma = \{\boldsymbol{\alpha}_1, \ldots, \boldsymbol{\alpha}_m\}$. These alpha vector define an _approximately optimal value function_:
 
 $$U^\Gamma(\mathbf{b}) = \max_{\boldsymbol\alpha \in \Gamma}\boldsymbol\alpha^\top\mathbf{b}$$
@@ -593,7 +589,7 @@ pbvi_policy = solve(pbvi_solver, pomdp)
 
 # ╔═╡ 6ea123be-f4df-11ea-21d2-71b166bb066a
 md"""
-## Visualizing Alpha Vectors
+## 4. Visualizing Alpha Vectors
 **_Recall_**: Since we do not know the current state exactly, we can compute the *utility* of our belief *b*
 
 $$U(b) = \sum_s b(s)U(s) = \mathbf{α}^\top \mathbf{b}$$
@@ -683,7 +679,7 @@ $$\begin{align}
 
 # ╔═╡ da57eb54-db90-42c2-ad30-8479ea2ff857
 md"""
-### Dominanting alpha vectors
+### 4.1 Dominanting alpha vectors
 To show the piecewise combination of the dominant alpha vectors, here we plot the combination and color the portion of the vector that corresponds to the two actions: $\texttt{feed}$ and $\texttt{ignore}$.
 """
 
@@ -775,7 +771,7 @@ end
 
 # ╔═╡ fb06f470-cba7-4a46-b997-bc3f8b7da7e1
 md"""
-### PBVI alpha vector
+### 4.2 PBVI alpha vector
 We now show how the PBVI algorithm selects the dominant alpha vector.
 """
 
@@ -820,7 +816,7 @@ end
 
 # ╔═╡ 2262f5e0-f60d-11ea-3744-c569380f8d28
 md"""
-## Solutions: _Online_
+## 5. Solutions: _Online_
 We can solve POMDPs online to produce a `planner` which we then query for an action *online*.
 """
 
@@ -847,7 +843,7 @@ tree = D3Tree(info[:tree], init_expand=3)
 
 # ╔═╡ 71406b44-9eed-4e18-b0e8-d1b723d943aa
 md"""
-## Concise POMDP definition
+## 6. Concise POMDP definition
 
 ```julia
 using POMDPs, POMDPModelTools, QuickPOMDPs
@@ -931,6 +927,9 @@ if POMDPs.action(AccelerateWhenBelievedDanger(), Real[0,1]) == CLEARofCONFLICT�
 else
 	keep_working(md"We want to `accelerate` the spacecraft when we believe it's in danger, and `do nothing` otherwise.")
 end
+
+# ╔═╡ dae97d90-f52d-11ea-08c5-bd13a9acbb8a
+hint(md"Maybe the `stateindex` function defined above could help—knowing that `b[1]` = _p(hungry)_ and `b[2]` = _p(full)_.")
 
 # ╔═╡ 50b377bc-5246-4eaa-9f83-d9e1592d4447
 TableOfContents(title="Partially Observable MDPs", depth=4)
@@ -2175,8 +2174,8 @@ version = "0.9.1+5"
 # ╟─eb932850-f4d6-11ea-3102-cbbf0e9d8189
 # ╠═3d57d840-f4d5-11ea-2744-c3e456949d67
 # ╟─d00d9b00-f4d7-11ea-3a5c-fdad48fabf71
-# ╠═61655130-f4d6-11ea-3aaf-53233c68b6a5
-# ╠═a78db25b-c324-4ffb-b39b-383768b0919c
+# ╟─61655130-f4d6-11ea-3aaf-53233c68b6a5
+# ╟─a78db25b-c324-4ffb-b39b-383768b0919c
 # ╟─648d16b0-f4d9-11ea-0a53-39c0bfe2b4e1
 # ╠═153496b0-f4d9-11ea-1cde-bbf92733afe3
 # ╟─b664c3b0-f52a-11ea-1e44-71034541ace4
@@ -2184,7 +2183,7 @@ version = "0.9.1+5"
 # ╟─b35776ca-6f61-47ee-ab37-48da09bbfb2b
 # ╠═0aa6d08a-8d41-44d5-a1e5-85a6bcb92e81
 # ╠═a858eddc-716b-49ac-864f-04c46b816ab6
-# ╠═704ea980-f4db-11ea-01db-233562722c4d
+# ╟─704ea980-f4db-11ea-01db-233562722c4d
 # ╠═fd7f872d-7ef2-4987-af96-4ca4573f29fc
 # ╟─d2a3f220-f52b-11ea-2360-bf797a6f9374
 # ╠═f3b9f270-f52b-11ea-2f2e-ef56d5522ffb
@@ -2192,7 +2191,7 @@ version = "0.9.1+5"
 # ╟─ea5c5ff0-f52c-11ea-2d8f-73cdc0137343
 # ╠═473d77c0-f4da-11ea-0af5-7f7690f39566
 # ╠═df1a89c8-28fe-428f-b31b-6d2ea48616bc
-# ╠═072fd490-f52d-11ea-390a-5f0c9d8be485
+# ╟─072fd490-f52d-11ea-390a-5f0c9d8be485
 # ╠═b9439a52-f522-11ea-3caf-2b4bf635b887
 # ╟─39d07e40-f52d-11ea-33a6-7b31da19d683
 # ╟─1a991add-b9f9-4140-a2cf-194963a8b22c
@@ -2200,6 +2199,7 @@ version = "0.9.1+5"
 # ╟─1c59e5f5-e644-4ade-9ade-b55203e2d80b
 # ╠═fb777410-f52b-11ea-294b-77b36ef4f6b3
 # ╟─ce584a40-f521-11ea-2119-01ed93a3f7cc
+# ╟─dae97d90-f52d-11ea-08c5-bd13a9acbb8a
 # ╟─2a144c90-f4db-11ea-3a54-bdb5002577f1
 # ╟─1687b4e0-f52c-11ea-04f0-b36f816b46c1
 # ╠═25079370-f525-11ea-1c0a-ad5e0b53744a
@@ -2242,21 +2242,22 @@ version = "0.9.1+5"
 # ╠═ebe99578-a11c-4c30-a33f-10e78614a70e
 # ╠═d4f99682-76ce-4ebc-828b-cff812d4ff56
 # ╟─c322f12c-eb6e-4ec0-b5d5-1f1ba00cc216
-# ╠═da57eb54-db90-42c2-ad30-8479ea2ff857
+# ╟─da57eb54-db90-42c2-ad30-8479ea2ff857
 # ╠═f85e829f-ebb4-4eba-a2e9-85661b338339
 # ╠═09a4bc95-f566-4248-bae0-ee142b1c9b4f
 # ╠═d95811f2-98c9-417d-9f72-2ed161e5419c
 # ╟─c8cdfb8a-8666-443b-bd42-782585c95948
-# ╠═fb06f470-cba7-4a46-b997-bc3f8b7da7e1
+# ╟─fb06f470-cba7-4a46-b997-bc3f8b7da7e1
 # ╠═347ed884-bf27-4364-9ab9-f51795a38852
 # ╠═f485cd7a-fe3c-4383-a446-8ce92d53384a
+# ╠═26869db9-4400-4d5a-ba3d-a6d2d7c79c4e
 # ╠═01f371b8-7717-4f31-849e-9062ed79953c
 # ╟─9ffe1fcd-fab0-42e0-ab3a-4b847b2986d7
 # ╠═478ead5f-7a08-4a35-bf1a-34efdd876ec6
 # ╠═78166467-9d55-4756-aabc-93d6f6f71e85
 # ╠═abd5ae8d-aa46-4a6e-af7e-b43fb3cbd0a1
 # ╟─d251bb16-985f-480c-ae2a-51d04412d975
-# ╠═2262f5e0-f60d-11ea-3744-c569380f8d28
+# ╟─2262f5e0-f60d-11ea-3744-c569380f8d28
 # ╟─e489c1b0-f619-11ea-1cbd-e18cd6b598cb
 # ╠═315ede12-f60d-11ea-076e-e1b8b460aa9e
 # ╠═f9757160-f60e-11ea-3ca8-358b725c5239
